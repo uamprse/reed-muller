@@ -65,7 +65,7 @@ class ReedMuller:
         return self.k
 
     def block_length(self):
-        """Длина кодированного сообщения."""
+        """Длина закодированного сообщения."""
         return self.n
 
     def _construct_matrix(self):
