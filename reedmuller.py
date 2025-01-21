@@ -145,7 +145,7 @@ def add_noise(codeword, error_probability=0.1):
     return [bit ^ random.choice([0, 1]) if random.random() < error_probability else bit for bit in codeword]
 
 def simulate_coding_with_noise():
-    r, m = 2, 4
+    r, m = 1, 4
     rm = ReedMuller(r, m)
 
     message_length = rm.message_length()
