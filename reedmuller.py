@@ -57,7 +57,7 @@ class ReedMuller:
         self.n = 2 ** m
 
     def strength(self):
-        """Возвращает силу кода, т.е. количество ошибок, которые можно исправить."""
+        """Количество ошибок, которые можно исправить."""
         return 2 ** (self.m - self.r - 1) - 1
 
     def message_length(self):
