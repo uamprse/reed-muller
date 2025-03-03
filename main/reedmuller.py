@@ -141,41 +141,13 @@ def _generate_all_vectors(n):
 def _characteristic_vector(n, S):
     return np.array([0 if i not in S else 1 for i in range(n)], dtype=int)
 
-def add_noise(codeword, error_probability=0.1):
-    return [bit ^ random.choice([0, 1]) if random.random() < error_probability else bit for bit in codeword]
-
-def simulate_coding_with_noise():
-    r, m = 2, 4
-    rm = ReedMuller(r, m)
-
-    message_length = rm.message_length()
-    all_messages = _generate_all_vectors(message_length)
-
-    success = True
-    for word in all_messages:
-        print("\nИсходное сообщение:")
-        print(word)
-
-        codeword = rm.encode(word)
-        print("\nКодированное слово:")
-        print(codeword)
-
-        noisy_codeword = add_noise(codeword, error_probability=0.1)
-        print("\nКодовое слово с шумами:")
-        print(noisy_codeword)
-
-        decoded_word = rm.decode(noisy_codeword)
-        print("\nДекодированное слово:")
-        if decoded_word is None:
-            print("Не удалось корректно декодировать слово.")
+def add_noise(codeword: List[int], error_probability=0.05) -> List[int]:
+    """Добавляет шум к кодовому слову: вероятность ошибки для каждого бита."""
+    noisy = []
+    for bit in codeword:
+        if random.random() < error_probability:
+            noisy.append(1 - bit)
         else:
-            print(decoded_word)
-        if not np.array_equal(decoded_word, word):
-            print(f'ERROR: encode({word}) => {codeword}, noisy({codeword} + noise => {noisy_codeword}) => {decoded_word}')
-            success = False
+            noisy.append(bit)
+    return noisy
 
-    if success:
-        print(f'RM({r},{m}): успех.')
-
-if __name__ == '__main__':
-    simulate_coding_with_noise()
