@@ -5,7 +5,7 @@ import random
 from typing import List
 
 def _binom(n, k):
-    """Биномиальный коэффициент (n-k)!/k!."""
+    """Биномиальный коэффициент."""
     return math.factorial(n) // (math.factorial(k) * math.factorial(n - k))
 
 def _construct_vector(m, i):
@@ -46,6 +46,35 @@ def _generate_all_rows(m, S):
     not_xi_row = _vector_neg(xi_row)
     return [xi_row * row for row in Srest_rows] + [not_xi_row * row for row in Srest_rows]
 
+
+def _generate_rm_generator(r, m):
+    """
+    Генерирует генераторную матрицу для кода Рида–Маллера RM(r, m).
+    Каждая строка соответствует значению монома (степень монома не более r)
+    на всех 2^m точках пространства.
+    """
+    x_rows = [np.array(_construct_vector(m, i), dtype=int) for i in range(m)]
+
+    matrix_by_row = [
+        np.prod([x_rows[i] for i in S], axis=0) if len(S) > 0 else np.ones(2 ** m, dtype=int)
+        for s in range(r + 1)
+        for S in itertools.combinations(range(m), s)
+    ]
+    M = np.array(matrix_by_row)
+    return M
+
+def construct_check_matrix(r, m):
+    """
+    Для кода Рида–Маллера RM(r, m) строит проверочную матрицу H.
+    По свойству двойственности:
+      H = генераторная матрица кода RM(m - r - 1, m).
+    """
+    r_dual = m - r - 1
+    if r_dual < 0:
+        return []
+    H = _generate_rm_generator(r_dual, m)
+    return H
+
 class ReedMuller:
     """Класс, представляющий код Рида-Маллера RM(r,m)."""
 
@@ -71,6 +100,7 @@ class ReedMuller:
     def _construct_matrix(self):
         x_rows = [np.array(_construct_vector(self.m, i), dtype=int) for i in range(self.m)]
 
+
         self.matrix_by_row = [
             np.prod([x_rows[i] for i in S], axis=0) if len(S) > 0 else np.ones(2 ** self.m, dtype=int)
             for s in range(self.r + 1)
@@ -83,6 +113,8 @@ class ReedMuller:
             for S in itertools.combinations(range(self.m), s)
         ]
 
+        # print(self.voting_rows)
+
         self.row_indices_by_degree = [0]
         for degree in range(1, self.r + 1):
             self.row_indices_by_degree.append(self.row_indices_by_degree[degree - 1] + _binom(self.m, degree))
@@ -90,8 +122,11 @@ class ReedMuller:
         self.M = np.array(self.matrix_by_row).T
 
     def encode(self, word):
-        assert len(word) == self.k
-        return [_dot_product(word, col) % 2 for col in self.M]
+        if word is None:
+            return []
+        encoded = [_dot_product(word, col) % 2 for col in self.M]
+        # print(f"Кодирование: входное сообщение {word}, закодированное слово {encoded}")
+        return encoded
 
     def decode(self, eword: List[int]) -> np.ndarray:
         word = np.full(self.k, -1, dtype=int)
@@ -116,8 +151,24 @@ class ReedMuller:
         if np.any(word == -1):
             return None
 
+        # print("Декодированное слово:", word)
         return word
 
+    def verify_codeword(self, c: List[int]) -> bool:
+        """
+        Проверяет, удовлетворяет ли кодовое слово c проверочным уравнениям,
+        т.е. H * c^T = 0 (по модулю 2).
+        """
+        if len(c) == 0:
+            return False
+        H = construct_check_matrix(self.r, self.m)
+        # print("\nПроверочная матрица:\n", H)
+        if len(H) == 0 :
+            return True
+        else:
+            c = np.array(c, dtype=int)
+            syndrome = np.mod(np.dot(H, c.T), 2)
+            return np.all(syndrome == 0)
 
     def __repr__(self):
         return f'<Код Рида-Маллера RM({self.r},{self.m}), сила={self.strength()}>'
@@ -141,7 +192,7 @@ def _generate_all_vectors(n):
 def _characteristic_vector(n, S):
     return np.array([0 if i not in S else 1 for i in range(n)], dtype=int)
 
-def add_noise(codeword: List[int], error_probability=0.05) -> List[int]:
+def add_noise(codeword: List[int], error_probability) -> List[int]:
     """Добавляет шум к кодовому слову: вероятность ошибки для каждого бита."""
     noisy = []
     for bit in codeword:
@@ -150,4 +201,3 @@ def add_noise(codeword: List[int], error_probability=0.05) -> List[int]:
         else:
             noisy.append(bit)
     return noisy
-

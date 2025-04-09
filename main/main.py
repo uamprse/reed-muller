@@ -1,6 +1,8 @@
 import os
 import numpy as np
-from reedmuller import ReedMuller, add_noise
+import time
+from utils.select_params import select_reed_muller_params_poisson
+from .reedmuller import ReedMuller, add_noise
 from pydub import AudioSegment
 from utils.config import STREAM_URL, CHUNK_SIZE, TARGET_DURATION_MS, FRAME_RATE, CHANNELS, SAMPLE_WIDTH, NOISE_PROBABILITY
 from utils.audio import capture_audio_segment
@@ -12,27 +14,29 @@ def process_blocks(blocks, rm: ReedMuller, noise_probability: float):
     error_count = 0
 
     for block in blocks:
-        # наложение шума на обычное аудио для noisy.wav
-        noisy_block = add_noise(block, error_probability=(noise_probability * (rm.n/ rm.k)))
+        noisy_block = add_noise(block, error_probability=noise_probability)
         noisy_blocks.append(noisy_block)
 
-        # наложение шума на кодированное аудио для ecovered.wav
         encoded = rm.encode(block)
         noisy_encoded = add_noise(encoded, error_probability=noise_probability)
         decoded = rm.decode(noisy_encoded)
-        if decoded is None:
+        codeword_check = rm.encode(decoded)
+        # print(decoded, codeword_check)
+        if not rm.verify_codeword(codeword_check):
             error_count += 1
-            decoded = noisy_block  # если декодирование не удалось, используем исходный испорченный блок
-        recovered_blocks.append(decoded)
+            recovered_blocks.append(np.array([0]* rm.k))
+        else:
+            recovered_blocks.append(decoded)
 
     return noisy_blocks, recovered_blocks, error_count
 
 def main():
-    video_dir = "video"
+    video_dir = "audio"
     if not os.path.exists(video_dir):
         os.makedirs(video_dir)
 
     print("Захват аудио...")
+    start_time = time.time()
     original_audio = capture_audio_segment(STREAM_URL, TARGET_DURATION_MS, CHUNK_SIZE)
     if original_audio is None:
         print("Не удалось захватить аудио.")
@@ -51,11 +55,18 @@ def main():
         bitstream.extend(int16_to_bits(sample))
     print(f"Общее количество бит: {len(bitstream)}")
 
-    RM_r = 1
-    RM_m = 4
+    n = 32
+
+    rm_params = select_reed_muller_params_poisson(n, NOISE_PROBABILITY)
+    if rm_params is None:
+        print("Не удалось подобрать параметры кода.")
+        return
+    RM_r, RM_m = rm_params
+    print(f"Выбранный код: RM({RM_r},{RM_m}) с длиной кодового слова n = {n}")
+
     rm = ReedMuller(r=RM_r, m=RM_m)
     k = rm.message_length()
-    print(f"Используем код: {rm}")
+    print(f"Длина сообщения для кодирования: {k}")
 
     blocks = split_bits_into_blocks(bitstream, k)
     print(f"Количество блоков по {k} бит: {len(blocks)}")
@@ -86,8 +97,11 @@ def main():
     recovered_path = os.path.join(video_dir, "recovered.wav")
     noisy_audio.export(noisy_path, format="wav")
     recovered_audio.export(recovered_path, format="wav")
+    end_time = time.time()
     print(f"Промежуточное аудио (с шумами) сохранено в '{noisy_path}'.")
     print(f"Восстановленное аудио сохранено в '{recovered_path}'.")
+    print(f"Симуляция заняла {end_time - start_time:.2f} секунд.")
+
 
 if __name__ == "__main__":
     main()
